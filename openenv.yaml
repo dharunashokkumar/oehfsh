@@ -1,0 +1,4 @@
+name: incident-triage-env
+description: "Incident Response Triage - AI agent triages server alerts, prioritizes severity, assigns teams, groups cascading failures, and identifies root causes."
+version: "0.1.0"
+tags: [openenv, incident-response, triage, ops]
