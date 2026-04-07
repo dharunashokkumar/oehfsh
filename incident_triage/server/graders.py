@@ -174,8 +174,14 @@ def grade(task_id: str, actions: list[dict], ground_truth: list[dict]) -> dict:
         })
 
     total = sum(details.values())
+    # Clamp score to strictly within (0, 1) as required by the validator
+    score = round(total, 4)
+    if score <= 0.0:
+        score = 0.01
+    elif score >= 1.0:
+        score = 0.99
     return {
-        "score": round(total, 4),
+        "score": score,
         "breakdown": {k: round(v, 4) for k, v in breakdown.items()},
         "details": {k: round(v, 4) for k, v in details.items()},
         "per_alert": per_alert,
