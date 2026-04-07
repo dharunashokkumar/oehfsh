@@ -66,60 +66,74 @@ def main():
 
     for task_info in tasks:
         task_id = task_info["task_id"]
-        print(f"[START] task={task_id}", flush=True)
+        rewards = []
+        steps_taken = 0
+        score = 0.0
+        success = False
 
-        # Reset the environment for this task
-        reset_resp = http.post("/reset", json={"task_id": task_id}).json()
-        obs = reset_resp["observation"]
-        obs_alerts = obs["alerts"]
-
-        alert_text = json.dumps(obs_alerts, indent=2)
-        user_prompt = (
-            f"Task: {task_info['description']}\n\n"
-            f"Alerts ({len(obs_alerts)} total):\n{alert_text}\n\n"
-            "Respond with ONLY a JSON array of triage actions."
-        )
+        print(f"[START] task={task_id} env=incident-triage-env model={MODEL_NAME}", flush=True)
 
         try:
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=0,
-                max_tokens=4096,
+            # Reset the environment for this task
+            reset_resp = http.post("/reset", json={"task_id": task_id}).json()
+            obs = reset_resp["observation"]
+            obs_alerts = obs["alerts"]
+
+            alert_text = json.dumps(obs_alerts, indent=2)
+            user_prompt = (
+                f"Task: {task_info['description']}\n\n"
+                f"Alerts ({len(obs_alerts)} total):\n{alert_text}\n\n"
+                "Respond with ONLY a JSON array of triage actions."
             )
-        except Exception as e:
-            print(f"[STEP] step=1 reward=0.0", flush=True)
-            print(f"[END] task={task_id} score=0.0 steps=1", flush=True)
-            continue
 
-        content = response.choices[0].message.content.strip()
-        # Strip markdown code fences if present
-        if content.startswith("```"):
-            content = content.split("\n", 1)[1]
-            if content.endswith("```"):
-                content = content[: content.rfind("```")]
-        try:
-            actions = json.loads(content)
-        except json.JSONDecodeError:
-            print(f"[STEP] step=1 reward=0.0", flush=True)
-            print(f"[END] task={task_id} score=0.0 steps=1", flush=True)
-            continue
+            try:
+                response = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=0,
+                    max_tokens=4096,
+                )
+            except Exception as e:
+                steps_taken = 1
+                rewards.append(0.0)
+                print(f"[STEP] step=1 action=llm_call reward=0.00 done=true error={e}", flush=True)
+                continue
 
-        grade_resp = http.post(
-            "/grader",
-            json={"task_id": task_id, "actions": actions},
-        ).json()
+            content = response.choices[0].message.content.strip()
+            # Strip markdown code fences if present
+            if content.startswith("```"):
+                content = content.split("\n", 1)[1]
+                if content.endswith("```"):
+                    content = content[: content.rfind("```")]
+            try:
+                actions = json.loads(content)
+            except json.JSONDecodeError:
+                steps_taken = 1
+                rewards.append(0.0)
+                print(f"[STEP] step=1 action=parse_response reward=0.00 done=true error=JSONDecodeError", flush=True)
+                continue
 
-        score = grade_resp["score"]
-        breakdown = ", ".join(
-            f"{k}={v:.2f}" for k, v in grade_resp["breakdown"].items()
-        )
-        print(f"{task_id:<12} {score:>8.4f} {breakdown}")
-        print(f"[STEP] step=1 reward={score:.4f}", flush=True)
-        print(f"[END] task={task_id} score={score:.4f} steps=1", flush=True)
+            grade_resp = http.post(
+                "/grader",
+                json={"task_id": task_id, "actions": actions},
+            ).json()
+
+            score = grade_resp["score"]
+            score = min(max(score, 0.0), 1.0)
+            success = score > 0.0
+            steps_taken = 1
+            rewards.append(score)
+
+            print(f"[STEP] step=1 action=triage reward={score:.2f} done=true error=null", flush=True)
+
+        finally:
+            rewards_str = ",".join(f"{r:.2f}" for r in rewards) if rewards else "0.00"
+            if steps_taken == 0:
+                steps_taken = 1
+            print(f"[END] success={str(success).lower()} steps={steps_taken} score={score:.2f} rewards={rewards_str}", flush=True)
 
     http.close()
 
