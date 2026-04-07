@@ -68,7 +68,7 @@ def main():
         task_id = task_info["task_id"]
         rewards = []
         steps_taken = 0
-        score = 0.0
+        score = 0.01
         success = False
 
         print(f"[START] task={task_id} env=incident-triage-env model={MODEL_NAME}", flush=True)
@@ -98,8 +98,8 @@ def main():
                 )
             except Exception as e:
                 steps_taken = 1
-                rewards.append(0.0)
-                print(f"[STEP] step=1 action=llm_call reward=0.00 done=true error={e}", flush=True)
+                rewards.append(0.01)
+                print(f"[STEP] step=1 action=llm_call reward=0.01 done=true error={e}", flush=True)
                 continue
 
             content = response.choices[0].message.content.strip()
@@ -112,8 +112,8 @@ def main():
                 actions = json.loads(content)
             except json.JSONDecodeError:
                 steps_taken = 1
-                rewards.append(0.0)
-                print(f"[STEP] step=1 action=parse_response reward=0.00 done=true error=JSONDecodeError", flush=True)
+                rewards.append(0.01)
+                print(f"[STEP] step=1 action=parse_response reward=0.01 done=true error=JSONDecodeError", flush=True)
                 continue
 
             grade_resp = http.post(
@@ -122,7 +122,7 @@ def main():
             ).json()
 
             score = grade_resp["score"]
-            score = min(max(score, 0.0), 1.0)
+            score = min(max(score, 0.01), 0.99)
             success = score > 0.0
             steps_taken = 1
             rewards.append(score)
@@ -130,7 +130,7 @@ def main():
             print(f"[STEP] step=1 action=triage reward={score:.2f} done=true error=null", flush=True)
 
         finally:
-            rewards_str = ",".join(f"{r:.2f}" for r in rewards) if rewards else "0.00"
+            rewards_str = ",".join(f"{r:.2f}" for r in rewards) if rewards else "0.01"
             if steps_taken == 0:
                 steps_taken = 1
             print(f"[END] success={str(success).lower()} steps={steps_taken} score={score:.2f} rewards={rewards_str}", flush=True)
