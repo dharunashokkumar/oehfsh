@@ -66,6 +66,7 @@ def main():
 
     for task_info in tasks:
         task_id = task_info["task_id"]
+        print(f"[START] task={task_id}", flush=True)
 
         # Reset the environment for this task
         reset_resp = http.post("/reset", json={"task_id": task_id}).json()
@@ -90,7 +91,8 @@ def main():
                 max_tokens=4096,
             )
         except Exception as e:
-            print(f"{task_id:<12} {'ERROR':>8} LLM call failed: {e}")
+            print(f"[STEP] step=1 reward=0.0", flush=True)
+            print(f"[END] task={task_id} score=0.0 steps=1", flush=True)
             continue
 
         content = response.choices[0].message.content.strip()
@@ -102,7 +104,8 @@ def main():
         try:
             actions = json.loads(content)
         except json.JSONDecodeError:
-            print(f"{task_id:<12} {'FAIL':>8} Could not parse LLM response")
+            print(f"[STEP] step=1 reward=0.0", flush=True)
+            print(f"[END] task={task_id} score=0.0 steps=1", flush=True)
             continue
 
         grade_resp = http.post(
@@ -110,10 +113,13 @@ def main():
             json={"task_id": task_id, "actions": actions},
         ).json()
 
+        score = grade_resp["score"]
         breakdown = ", ".join(
             f"{k}={v:.2f}" for k, v in grade_resp["breakdown"].items()
         )
-        print(f"{task_id:<12} {grade_resp['score']:>8.4f} {breakdown}")
+        print(f"{task_id:<12} {score:>8.4f} {breakdown}")
+        print(f"[STEP] step=1 reward={score:.4f}", flush=True)
+        print(f"[END] task={task_id} score={score:.4f} steps=1", flush=True)
 
     http.close()
 
